@@ -1,10 +1,18 @@
+from pprint import pprint
 import numpy as np
-from typing import List
+from typing import List, Tuple
+
 
 class Site:
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
+
+    def __str__(self) -> str:
+        return f"({self.x}, {self.y})"
+
+    def __repr__(self) -> str:
+        return f"Site({self.x}, {self.y})"
 
 
 class QuadEdge:
@@ -12,6 +20,10 @@ class QuadEdge:
         self.origin = None
         self.rot = None
         self.onext = None
+
+    @property
+    def oprev(self):
+        return self.rot.onext.rot
 
     @property
     def dest(self):
@@ -23,7 +35,7 @@ class QuadEdge:
 
     @property
     def left(self):
-        return self.inv_rot().origin
+        return self.inv_rot.origin
 
     @property
     def sym(self):
@@ -85,8 +97,11 @@ class QuadEdge:
 
     @staticmethod
     def splice(a, b):
-        a.onext.rot.onext, b.onext.rot.onext = b.onext.rot.onext, a.onext.rot.onext
+        alpha = a.onext.rot
+        beta = b.onext.rot
+
         a.onext, b.onext = b.onext, a.onext
+        alpha.onext, beta.onext = beta.onext, alpha.onext
 
     @staticmethod
     def connect(a, b):
@@ -97,137 +112,121 @@ class QuadEdge:
 
     @staticmethod
     def delete(e):
-        QuadEdge.splice(e, e.oprev())
-        QuadEdge.splice(e.sym, e.sym.oprev())
+        QuadEdge.splice(e, e.oprev)
+        QuadEdge.splice(e.sym, e.sym.oprev)
 
 
 class Mesh:
     def __init__(self) -> None:
-        self.site = None
-        self.left = None
-        self.right = None
+        self.sites: Site = None
+        self.left: QuadEdge = None
+        self.right: QuadEdge = None
 
 
 def triangulate(sites: List[Site]) -> Mesh:
     sites.sort(key=lambda s: (s.x, s.y))
-
-
-def delaunay(sites: List[Site]) -> Mesh:
-    if len(sites) == 2:
-        edges = Mesh()
-        a = QuadEdge.make_edge(sites[0], sites[1])
-        edges.left = a
-        edges.right = a.sym
-        return edges
-    if len(sites) == 3:
-        return make_ccw_triangle(sites)
-    return merge(delaunay(sites[: len(sites) // 2]), delaunay(sites[len(sites) // 2 :]))
-
-
-def make_ccw_triangle(sites: List[Site]) -> Mesh:
-    edges = Mesh()
-
-    a = QuadEdge.make_edge(sites[0], sites[1])
-    b = QuadEdge.make_edge(sites[1], sites[2])
-
-    QuadEdge.splice(a.sym, b)
-    if ccw(sites[0], sites[1], sites[2]):
-        c = QuadEdge.connect(b, a)
-        edges.left = a
-        edges.right = b.sym
-    else:
-        if ccw(sites[0], sites[2], sites[1]):
-            c = QuadEdge.connect(b, a)
-            edges.left = c.sym
-            edges.right = c
-        else:
-            edges.left = a
-            edges.right = b.sym
-
+    edges = delaunay(sites)
+    edges.sites = sites
     return edges
 
 
-def merge(left: Mesh, right: Mesh):
-    ldo = left.left
-    ldi = left.right
-    rdi = left.left
-    rdo = left.right
+def delaunay(sites: List[Site]) -> Tuple[QuadEdge, QuadEdge]:
+    sites.sort(key=lambda s: (s.x, s.y))
 
-    basel = QuadEdge()
-    lcand = QuadEdge()
-    rcand = QuadEdge()
-    t = QuadEdge()
+    if len(sites) == 2:
+        edge = QuadEdge.make_edge(sites[0], sites[1])
+        return [edge, edge.sym]
+    elif len(sites) == 3:
+        a = QuadEdge.make_edge(sites[0], sites[1])
+        b = QuadEdge.make_edge(sites[1], sites[2])
+        QuadEdge.splice(a.sym, b)
 
-    edges = Mesh()
+        if ccw(sites[0], sites[1], sites[2]):
+            c = QuadEdge.connect(b, a)
+            return (a, b.sym)
+        elif ccw(sites[0], sites[2], sites[1]):
+            c = QuadEdge.connect(b, a)
+            return (c.sym, c)
+        else:
+            return (a, b.sym)
+
+    n = len(sites)
+    (ldo, ldi) = delaunay(sites[: n // 2])
+    (rdi, rdo) = delaunay(sites[n // 2 :])
 
     while True:
         if left_of(rdi.origin, ldi):
             ldi = ldi.lnext
-            continue
         elif right_of(ldi.origin, rdi):
             rdi = rdi.rprev
-            continue
-        break
+        else:
+            break
 
-    basel = QuadEdge.connect(rdi.sym, ldi)
+    base1 = QuadEdge.connect(rdi.sym, ldi)
+
     if ldi.origin == ldo.origin:
-        ldo = basel.sym
+        ldo = base1.sym
     if rdi.origin == rdo.origin:
-        rdo = basel
+        rdo = base1
+
+    def valid(e):
+        return right_of(e.dest, base1)
 
     while True:
-        lcand = basel.sym.onext
-        if right_of(lcand.dest, basel):
-            while in_circle(basel.dest, basel.orgin, lcand.dest, lcand.onext.dest):
+        lcand = base1.sym.onext
+        if valid(lcand):
+            while in_circle(base1.dest, base1.origin, lcand.dest, lcand.onext.dest):
                 t = lcand.onext
                 QuadEdge.delete(lcand)
                 lcand = t
 
-        rcand = basel.oprev
-        if right_of(rcand.dest, basel):
-            while in_circle(basel.dest, basel.orgin, rcand.dest, rcand.oprev.dest):
+        rcand = base1.oprev
+        if valid(rcand):
+            while in_circle(base1.dest, base1.origin, rcand.dest, rcand.oprev.dest):
                 t = rcand.oprev
                 QuadEdge.delete(rcand)
                 rcand = t
-
-        valid_lcand = ccw(lcand.dest, basel.dest, basel.origin)
-        valid_rcand = ccw(rcand.dest, basel.dest, basel.origin)
-
-        if not valid_lcand and not valid_rcand:
+                
+        if not valid(lcand) and not valid(rcand):
             break
-        if (
-            not valid_lcand
-            or not valid_rcand
-            and in_circle(lcand.dest, lcand.origin, rcand.origin, rcand.dest)
-        ):
-            basel = QuadEdge.connect(rcand, basel.sym)
+        if not valid(lcand) or (valid(lcand) and in_circle(lcand.dest, lcand.origin, rcand.origin, rcand.dest)):
+            base1 = QuadEdge.connect(rcand, base1.sym)
         else:
-            basel = QuadEdge.connect(basel.sym, lcand.sym)
-
-    edges.left = ldo
-    edges.right = rdo
-    return edges
-
+            base1 = QuadEdge.connect(base1.sym, lcand.sym)
+    
+    return (ldo, rdo)
 
 
 def in_circle(a: Site, b: Site, c: Site, p: Site):
     return (
         np.linalg.det(
-            [a.x - p.x, a.y - p.y, (a.x - p.x) ** 2 + (a.y - p.y) ** 2],
-            [b.x - p.x, b.y - p.y, (b.x - p.x) ** 2 + (b.y - p.y) ** 2],
-            [c.x - p.x, c.y - p.y, (c.x - p.x) ** 2 + (c.y - p.y) ** 2],
+            [
+                [a.x, a.y, a.x**2 + a.y**2, 1],
+                [b.x, b.y, b.x**2 + b.y**2, 1],
+                [c.x, c.y, c.x**2 + c.y**2, 1],
+                [p.x, p.y, p.x**2 + p.y**2, 1],
+            ]
         )
         > 0
     )
 
-def ccw(a: Site, b: Site, c: Site):
-    return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y) > 0
 
-def left_of(site: Site, edge: QuadEdge):
-    return ccw(site, edge.dest, edge.origin)
+def ccw(a: Site, b: Site, c: Site):
+    return np.linalg.det(
+        [
+            [a.x, a.y, 1], 
+            [b.x, b.y, 1], 
+            [c.x, c.y, 1]
+        ]) > 0
 
 
 def right_of(site: Site, edge: QuadEdge):
+    return ccw(site, edge.dest, edge.origin)
+
+
+def left_of(site: Site, edge: QuadEdge):
     return ccw(site, edge.origin, edge.dest)
 
-mesh = delaunay([Site(0, 0), Site(1, 0), Site(0, 1)])
+
+left, right = delaunay([Site(0, 0), Site(1, 0), Site(0, 1), Site(1, 1), Site(0.5, 0.5)])
+
