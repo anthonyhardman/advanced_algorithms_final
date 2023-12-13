@@ -8,9 +8,19 @@ class:
 
 # **Final Project Presentation**
 ### Delaunay Triangulation and Voronoi Diagrams
-#### [Your Name]
-#### [Date]
 
+---
+## Key Reference
+
+- This project is inspired and informed by two pivotal papers, reflecting the integration of theoretical and practical aspects:
+
+  1. **Dynamic Fusion Pathfinding in Robotics**
+     - **Paper**: [A Dynamic Fusion Pathfinding Algorithm Using Delaunay Triangulation and Improved A-Star for Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9337860)
+     - **Insight**: Demonstrates the application of Delaunay Triangulation in robotic pathfinding, guiding the practical aspect of the project.
+
+  2. **Fundamentals in Computational Geometry**
+     - **Paper**: _[Primitives for the Manipulation of General Subdivisions and the Computation of Voronoi Diagrams](https://dl.acm.org/doi/pdf/10.1145/282918.282923)_
+     - **Impact**: Provides foundational algorithms and concepts essential to the theoretical framework of the project.
 ---
 
 # Introduction to Computational Geometry
@@ -165,8 +175,4 @@ class:
 - **Potential Impact**:
   - Applications in computational geometry, navigation systems, and spatial analysis.
 
----
 
-# Questions
-- **Thank You!**
-  - Ready to answer any questions.
